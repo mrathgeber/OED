@@ -163,6 +163,7 @@ mocha.describe('readings API', () => {
 	mocha.describe('readings test, test if data returned by API is as expected', () => {
 		mocha.describe('for line charts', () => {
 			mocha.describe('for meters', () => {
+
 				// A reading response should have a reading, startTimestamp, and endTimestamp key
 				mocha.it('response should have valid reading and timestamps,', async () => {
 					// Create 2D array for meter to feed into the database
@@ -338,6 +339,7 @@ mocha.describe('readings API', () => {
 						.query({ timeInterval: createTimeString('2022-09-21', '00:00:00', '2022-10-06', '00:15:00'), graphicUnitId: unitId });
 					expectReadingToEqualExpected(res, expected);
 				});
+
 				// 14 days barely gives raw points & middle readings
 				mocha.it('14 days barely gives raw points & middle readings', async () => {
 					// Create 2D array for meter to feed into the database
@@ -365,7 +367,36 @@ mocha.describe('readings API', () => {
 						.query({ timeInterval: createTimeString('2022-09-21', '00:00:00', '2022-10-05', '00:00:00'), graphicUnitId: unitId });
 					expectReadingToEqualExpected(res, expected);
 				});
-				// Test 15 minutes over all time for flow unit.
+
+				//partial days/hours for daily gives only full days
+				mocha.it('partial days/hours for daily gives only full days', async () => {
+					// Create 2D array for meter to feed into the database
+					// Note the meter ID is set so we know what to expect when a query is made.
+					const meterData = [
+						{
+							name: 'Electric Utility kWh',
+							unit: 'Electric_Utility',
+							defaultGraphicUnit: 'kWh',
+							displayable: true,
+							gps: undefined,
+							note: 'special meter',
+							file: 'test/web/readingsData/readings_ri_15_days_75.csv',
+							deleteFile: false,
+							readingFrequency: '15 minutes',
+							id: METER_ID
+						}
+					];
+					// Load the data into the database
+					await prepareTest(unitDatakWh, conversionDatakWh, meterData);
+					// Get the unit ID since the DB could use any value.
+					const unitId = await getUnitId('kWh');
+					const expected = await parseExpectedCsv('src/server/test/web/readingsData/expected_line_ri_15_mu_kWh_gu_kWh_st_2022-08-20%07#25#35_et_2022-10-28%13#18#28.csv');
+					const res = await chai.request(app).get(`/api/unitReadings/line/meters/${METER_ID}`)
+						.query({ timeInterval: createTimeString('2022-08-20', '07:25:35', '2022-10-28', '13:18:28'), graphicUnitId: unitId });
+					expectReadingToEqualExpected(res, expected);
+				});
+
+				// Test 15 minutes over all time for flow unit. -------------------------
 				mocha.it('should have daily points for 15 minute reading intervals and flow units with +-inf start/end time & kW as kW', async () => {
 					const unitData = [
 						{
@@ -1395,6 +1426,7 @@ mocha.describe('readings API', () => {
 						.query({ timeInterval: ETERNITY.toString(), graphicUnitId: unitId });
 					expectReadingToEqualExpected(res, expected)
 				});
+
 				mocha.it('should have daily points for 15 minute reading intervals and quantity units with +-inf start/end time & kWh as metric ton of CO2 & chained', async () => {
 					const unitData = [
 						{
@@ -1492,6 +1524,7 @@ mocha.describe('readings API', () => {
 						.query({ timeInterval: ETERNITY.toString(), graphicUnitId: unitId });
 					expectReadingToEqualExpected(res, expected)
 				});
+
 				// When an invalid unit is added to a meter and loaded to the db, the API should return an empty array
 				mocha.it('should return an empty json object for an invalid unit', async () => {
 					const unitData = [
@@ -1551,6 +1584,7 @@ mocha.describe('readings API', () => {
 					expect(res.body).to.have.property(`${METER_ID}`).to.be.empty;
 				});
 			});
+
 			mocha.describe('for groups', () => {
 				// A reading response should have a reading, startTimestamp, and endTimestamp key
 				mocha.it('response should have valid reading and timestamps,', async () => {
@@ -1599,6 +1633,7 @@ mocha.describe('readings API', () => {
 				});
 			});
 		});
+
 		mocha.describe('for bar charts', () => {
 			// The logic here is effectively the same as the line charts, however bar charts have an added
 			// barWidthDays parameter that must be accounted for, which adds a few extra steps
@@ -1634,6 +1669,40 @@ mocha.describe('readings API', () => {
 					expect(res.body).to.have.property(`${METER_ID}`).to.have.property('0').to.have.property('reading');
 					expect(res.body).to.have.property(`${METER_ID}`).to.have.property('0').to.have.property('startTimestamp');
 					expect(res.body).to.have.property(`${METER_ID}`).to.have.property('0').to.have.property('endTimestamp');
+				});
+
+				mocha.it('13 day bars for 15 minute reading intervals and quantity units with +-inf start/end time & kWh as kWh', async () => {
+					// Create 2D array for meter to feed into the database
+					// Note the meter ID is set so we know what to expect when a query is made.
+					const meterData = [
+						{
+							name: 'Electric Utility kWh',
+							unit: 'Electric_Utility',
+							defaultGraphicUnit: 'kWh',
+							displayable: true,
+							gps: undefined,
+							note: 'special meter',
+							file: 'test/web/readingsData/readings_ri_15_days_75.csv',
+							deleteFile: false,
+							readingFrequency: '15 minutes',
+							id: METER_ID
+						}
+					];
+					// Load the data into the database
+					await prepareTest(unitDatakWh, conversionDatakWh, meterData);
+					// Get the unit ID since the DB could use any value.
+					const unitId = await getUnitId('kWh');
+					// Load the expected response data from the corresponding csv file
+					const expected = await parseExpectedCsv('src/server/test/web/readingsData/expected_bar_ri_15_mu_kWh_gu_kWh_st_-inf_et_inf_bd_13.csv');
+					// Create a request to the API for unbounded reading times and save the response
+					const res = await chai.request(app).get(`/api/unitReadings/bar/meters/${METER_ID}`)
+						.query({
+							timeInterval: ETERNITY.toString(),
+							barWidthDays: 13,
+							graphicUnitId: unitId
+						});
+					// Check that the API reading is equal to what it is expected to equal
+					expectReadingToEqualExpected(res, expected);
 				});
 			});
 			mocha.describe('for groups', () => {
@@ -1684,6 +1753,7 @@ mocha.describe('readings API', () => {
 				});
 			})
 		});
+
 	});
 	// These tests check the API behavior when improper calls are made, typically with incomplete parameters
 	// The API should return status code 400 regardless of what is in the database, so no data is loaded in these tests
